@@ -52,13 +52,8 @@ CREATE TABLE IF NOT EXISTS taxonomy_cache (
 """
 
 
-# ─── Helpers ──────────────────────────────────────────────
-async def _db() -> aiosqlite.Connection:
-    return await aiosqlite.connect(config.DB_PATH)
-
-
 async def init_db() -> None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         await db.executescript(_INIT_SQL)
         await db.commit()
 
@@ -73,7 +68,7 @@ async def create_draft(
     taxonomies: dict[str, list[int]] | None = None,
     featured_media_id: int = 0,
 ) -> int:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         cursor = await db.execute(
             """
             INSERT INTO drafts (tg_user_id, source_url, title, content, excerpt,
@@ -102,8 +97,7 @@ async def update_draft(
     taxonomies: dict[str, list[int]] | None = None,
     featured_media_id: int | None = None,
 ) -> None:
-    async with await _db() as db:
-        # Build dynamic UPDATE
+    async with aiosqlite.connect(config.DB_PATH) as db:
         fields: list[str] = []
         values: list[Any] = []
         if title is not None:
@@ -136,7 +130,7 @@ async def update_draft(
 
 
 async def get_draft(draft_id: int) -> dict[str, Any] | None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM drafts WHERE id = ?", (draft_id,)) as cur:
             row = await cur.fetchone()
@@ -148,7 +142,7 @@ async def get_draft(draft_id: int) -> dict[str, Any] | None:
 
 
 async def delete_draft(draft_id: int) -> None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         await db.execute("DELETE FROM drafts WHERE id = ?", (draft_id,))
         await db.commit()
 
@@ -163,7 +157,7 @@ async def log_publication(
     source_url: str = "",
     status: str = "published",
 ) -> None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         await db.execute(
             """
             INSERT INTO publications
@@ -186,7 +180,7 @@ async def log_publication(
 
 
 async def get_publication_by_source(source_url: str) -> dict[str, Any] | None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM publications WHERE source_url = ? LIMIT 1", (source_url,)
@@ -197,7 +191,7 @@ async def get_publication_by_source(source_url: str) -> dict[str, Any] | None:
 
 # ─── Taxonomy Cache ───────────────────────────────────────
 async def upsert_taxonomy_terms(taxonomy: str, terms: list[dict[str, Any]]) -> None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         for term in terms:
             await db.execute(
                 """
@@ -215,7 +209,7 @@ async def upsert_taxonomy_terms(taxonomy: str, terms: list[dict[str, Any]]) -> N
 
 
 async def get_taxonomy_terms(taxonomy: str) -> list[dict[str, Any]]:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT term_id, name, slug, count FROM taxonomy_cache WHERE taxonomy = ? ORDER BY name",
@@ -227,7 +221,7 @@ async def get_taxonomy_terms(taxonomy: str) -> list[dict[str, Any]]:
 
 async def get_all_active_taxonomies() -> dict[str, list[dict[str, Any]]]:
     """Return all taxonomies with count > 0 terms."""
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT DISTINCT taxonomy FROM taxonomy_cache WHERE count > 0 ORDER BY taxonomy"
@@ -246,6 +240,6 @@ async def get_all_active_taxonomies() -> dict[str, list[dict[str, Any]]]:
 
 
 async def clear_taxonomy_cache() -> None:
-    async with await _db() as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         await db.execute("DELETE FROM taxonomy_cache")
         await db.commit()
