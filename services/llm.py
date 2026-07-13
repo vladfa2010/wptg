@@ -159,7 +159,19 @@ Return ONLY JSON with these exact keys (snake_case):
         valid_ids = {t.get("term_id", t.get("id")) for t in terms}
         selected = result.get(tax_key, [])
         if isinstance(selected, list):
-            validated[tax_key] = [int(sid) for sid in selected if int(sid) in valid_ids]
+            validated_ids = []
+            for sid in selected:
+                try:
+                    # Handle LLM returning "67=AI" instead of 67
+                    sid_str = str(sid)
+                    if "=" in sid_str:
+                        sid_str = sid_str.split("=")[0]
+                    sid_int = int(sid_str)
+                    if sid_int in valid_ids:
+                        validated_ids.append(sid_int)
+                except (ValueError, TypeError):
+                    continue
+            validated[tax_key] = validated_ids
         else:
             validated[tax_key] = []
 
