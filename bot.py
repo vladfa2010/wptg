@@ -405,6 +405,7 @@ async def cb_text_back(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(Form.editing_text_field, TextFieldAction.filter(F.field == "title"))
 async def cb_edit_title(callback: types.CallbackQuery, state: FSMContext):
+    logger.info("cb_edit_title called")
     await callback.answer()
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
@@ -417,6 +418,7 @@ async def cb_edit_title(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(Form.editing_title)
 async def on_edit_title(message: types.Message, state: FSMContext):
+    logger.info("on_edit_title: received text, len=%d", len(message.text or ""))
     text = message.text.strip()
     if text == "/skip":
         pass
@@ -445,6 +447,7 @@ async def on_edit_title(message: types.Message, state: FSMContext):
 
 @dp.callback_query(Form.editing_text_field, TextFieldAction.filter(F.field == "content"))
 async def cb_edit_content(callback: types.CallbackQuery, state: FSMContext):
+    logger.info("cb_edit_content called")
     await callback.answer()
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
@@ -452,13 +455,13 @@ async def cb_edit_content(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Form.editing_content)
     await callback.message.edit_text(
         f"📝 <b>Текущий контент</b> ({len(draft['content'])} символов):\n\n"
-        f"<pre>{preview}</pre>\n\n"
         f"Пришлите новый текст (поддерживается HTML):",
         parse_mode="HTML",
     )
 
 @dp.message(Form.editing_content)
 async def on_edit_content(message: types.Message, state: FSMContext):
+    logger.info("on_edit_content: received text, len=%d", len(message.text or ""))
     text = message.text.strip()
     if text == "/skip":
         pass
@@ -487,6 +490,7 @@ async def on_edit_content(message: types.Message, state: FSMContext):
 
 @dp.callback_query(Form.editing_text_field, TextFieldAction.filter(F.field == "excerpt"))
 async def cb_edit_excerpt(callback: types.CallbackQuery, state: FSMContext):
+    logger.info("cb_edit_excerpt called")
     await callback.answer()
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
@@ -499,6 +503,7 @@ async def cb_edit_excerpt(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(Form.editing_excerpt)
 async def on_edit_excerpt(message: types.Message, state: FSMContext):
+    logger.info("on_edit_excerpt: received text, len=%d", len(message.text or ""))
     text = message.text.strip()
     if text == "/skip":
         pass
@@ -518,6 +523,12 @@ async def on_edit_excerpt(message: types.Message, state: FSMContext):
         ],
     ])
     await message.answer("✏️ <b>Редактирование текста</b>\n\nЧто ещё изменить?", parse_mode="HTML", reply_markup=kb)
+
+# Fallback for unhandled callbacks in editing_text_field state
+@dp.callback_query(Form.editing_text_field)
+async def cb_edit_fallback(callback: types.CallbackQuery, state: FSMContext):
+    logger.warning("Unhandled callback in editing_text_field: data=%s", callback.data)
+    await callback.answer("⚠️ Неизвестная кнопка")
 
 # ─── Edit Categories flow ─────────────────────────────────
 @dp.callback_query(Form.preview, PreviewAction.filter(F.action == "edit_categories"))
