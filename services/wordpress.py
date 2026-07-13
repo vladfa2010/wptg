@@ -82,6 +82,20 @@ async def upload_media(image_data: bytes, filename: str = "featured.jpg", mime_t
             return int(data["id"])
 
 
+async def get_media(media_id: int) -> dict[str, Any]:
+    """Get media details from WP. Returns {"id": int, "url": str, "mime_type": str} or {}."""
+    async with aiohttp.ClientSession(headers=_HEADERS) as session:
+        async with session.get(_url(f"wp/v2/media/{media_id}")) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json()
+            return {
+                "id": data.get("id", 0),
+                "url": data.get("source_url", ""),
+                "mime_type": data.get("mime_type", ""),
+            }
+
+
 async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Create a WordPress post.

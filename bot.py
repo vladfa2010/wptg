@@ -262,7 +262,7 @@ async def on_input(message: types.Message, state: FSMContext):
         )
         await state.set_state(Form.preview)
 
-        # Show preview
+        # Show preview with optional image
         preview = _preview_text(rewritten["title"], rewritten["excerpt"], taxonomies, all_terms)
         kb = types.InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -277,6 +277,24 @@ async def on_input(message: types.Message, state: FSMContext):
                 types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack()),
             ],
         ])
+
+        # Try to show image with preview
+        media_id = draft.get("featured_media_id") or 0
+        if media_id:
+            try:
+                media = await wordpress.get_media(media_id)
+                if media.get("url"):
+                    await status_msg.delete()
+                    await message.answer_photo(
+                        photo=media["url"],
+                        caption=preview,
+                        parse_mode="HTML",
+                        reply_markup=kb,
+                    )
+                    return
+            except Exception as img_exc:
+                logger.warning("Failed to show image in preview: %s", img_exc)
+
         await status_msg.edit_text(preview, parse_mode="HTML", reply_markup=kb)
 
     except Exception as exc:
