@@ -279,7 +279,7 @@ async def on_input(message: types.Message, state: FSMContext):
         ])
 
         # Try to show image with preview
-        media_id = draft.get("featured_media_id") or 0
+        media_id = featured_media_id
         if media_id:
             try:
                 media = await wordpress.get_media(media_id)
