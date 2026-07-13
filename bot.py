@@ -451,12 +451,12 @@ async def cb_edit_content(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
-    preview = _shorten(draft["content"])
+    content_len = len(draft["content"])
     await state.set_state(Form.editing_content)
+    # Use parse_mode=None to avoid conflicts with HTML tags in existing content
     await callback.message.edit_text(
-        f"📝 <b>Текущий контент</b> ({len(draft['content'])} символов):\n\n"
+        f"📝 Текущий контент ({content_len} символов)\n\n"
         f"Пришлите новый текст (поддерживается HTML):",
-        parse_mode="HTML",
     )
 
 @dp.message(Form.editing_content)
