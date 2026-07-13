@@ -108,6 +108,17 @@ def _shorten(text: str, max_len: int = 3500) -> str:
         return text
     return text[:max_len] + "\n\n... <i>(текст обрезан для превью)</i>"
 
+# ─── Fallback: any text without state ─────────────────────
+@dp.message(F.text)
+async def on_input_fallback(message: types.Message, state: FSMContext):
+    """Handle text when user hasn't used /start yet."""
+    text = message.text.strip()
+    if text.startswith("/"):
+        return  # Let command handlers handle this
+    # Auto-start and process
+    await state.set_state(Form.idle)
+    await on_input(message, state)
+
 # ─── /start ───────────────────────────────────────────────
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -152,7 +163,7 @@ async def cmd_sync(message: types.Message, state: FSMContext):
 @dp.message(Form.idle, F.text)
 async def on_input(message: types.Message, state: FSMContext):
     text = message.text.strip()
-    if not text:
+    if not text or text.startswith("/"):
         return
 
     # Check for duplicate by source URL
