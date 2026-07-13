@@ -262,8 +262,11 @@ async def on_input(message: types.Message, state: FSMContext):
         )
         await state.set_state(Form.preview)
 
+        # Reload draft from DB to ensure all fields are present
+        draft = await database.get_draft(draft_id)
+
         # Show preview with optional image
-        preview = _preview_text(rewritten["title"], rewritten["excerpt"], taxonomies, all_terms)
+        preview = _preview_text(draft["title"], draft["excerpt"], draft["taxonomies"], all_terms)
         kb = types.InlineKeyboardMarkup(inline_keyboard=[
             [
                 types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
@@ -279,7 +282,7 @@ async def on_input(message: types.Message, state: FSMContext):
         ])
 
         # Try to show image with preview
-        media_id = featured_media_id
+        media_id = draft.get("featured_media_id") or 0
         if media_id:
             try:
                 media = await wordpress.get_media(media_id)
