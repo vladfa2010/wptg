@@ -30,6 +30,7 @@ dp = Dispatcher(storage=storage)
 # ─── FSM States ───────────────────────────────────────────
 class Form(StatesGroup):
     idle = State()               # Waiting for URL or text
+    processing = State()         # Parse + rewrite + categorize
     preview = State()            # Showing preview with buttons
     editing_text_field = State() # Choose which field to edit
     editing_title = State()      # Edit title
@@ -166,6 +167,7 @@ async def on_input(message: types.Message, state: FSMContext):
 
     try:
         # Step 1: Parse
+        logger.info("Step 1: Parsing input...")
         await status_msg.edit_text("⏳ Шаг 1/4: Парсинг...")
         if text.startswith("http://") or text.startswith("https://"):
             parsed = await parser.parse_url(text)
@@ -173,6 +175,7 @@ async def on_input(message: types.Message, state: FSMContext):
             original_title = parsed["title"]
             content_text = parsed["text"]
             og_image_url = parsed["og_image"]
+            logger.info("Parsed URL: title=%s, text_len=%d", original_title, len(content_text))
         else:
             parsed = None
             source_url = ""
@@ -186,14 +189,17 @@ async def on_input(message: types.Message, state: FSMContext):
             return
 
         # Step 2: Rewrite
+        logger.info("Step 2: Rewriting...")
         await status_msg.edit_text("⏳ Шаг 2/4: Рерайт через LLM...")
         rewritten = await llm.rewrite(content_text, original_title)
+        logger.info("Rewritten: title=%s", rewritten["title"])
 
         # Step 3: Load taxonomy cache & categorize
+        logger.info("Step 3: Categorizing...")
         await status_msg.edit_text("⏳ Шаг 3/4: Категоризация...")
         all_terms = await database.get_all_active_taxonomies()
         if not all_terms:
-            # Auto-sync if empty
+            logger.info("Taxonomy cache empty, auto-syncing...")
             await status_msg.edit_text("⏳ Шаг 3/4: Кэш пуст, синхронизация...")
             wp_taxonomies = await wordpress.sync_taxonomies()
             for tax_name, terms in wp_taxonomies.items():
@@ -201,8 +207,10 @@ async def on_input(message: types.Message, state: FSMContext):
             all_terms = await database.get_all_active_taxonomies()
 
         taxonomies = await llm.categorize(rewritten["content"], all_terms)
+        logger.info("Categories assigned: %s", taxonomies)
 
         # Step 4: Generate image
+        logger.info("Step 4: Generating image...")
         await status_msg.edit_text("⏳ Шаг 4/4: Генерация картинки...")
         image_data = await image_generator.generate_image(
             rewritten["title"], rewritten["excerpt"]
@@ -213,9 +221,9 @@ async def on_input(message: types.Message, state: FSMContext):
                 featured_media_id = await wordpress.upload_media(
                     image_data, filename="featured.jpg"
                 )
+                logger.info("Generated image uploaded: media_id=%d", featured_media_id)
             except Exception as img_exc:
                 logger.warning("Image upload failed: %s", img_exc)
-                # Try OG image as fallback
                 if og_image_url:
                     try:
                         og_data = await parser.download_image(og_image_url)
@@ -225,7 +233,6 @@ async def on_input(message: types.Message, state: FSMContext):
                     except Exception:
                         pass
         elif og_image_url:
-            # Fallback to OG image
             try:
                 og_data = await parser.download_image(og_image_url)
                 featured_media_id = await wordpress.upload_media(
@@ -244,8 +251,8 @@ async def on_input(message: types.Message, state: FSMContext):
             taxonomies=taxonomies,
             featured_media_id=featured_media_id,
         )
+        logger.info("Draft saved: id=%d", draft_id)
 
-        # Store in FSM
         await state.update_data(
             draft_id=draft_id,
             taxonomies=taxonomies,
@@ -270,8 +277,12 @@ async def on_input(message: types.Message, state: FSMContext):
         await status_msg.edit_text(preview, parse_mode="HTML", reply_markup=kb)
 
     except Exception as exc:
-        logger.exception("Processing failed")
-        await status_msg.edit_text(f"❌ Ошибка обработки: {exc}\n\nПопробуйте /cancel и пришлите другой материал.")
+        logger.exception("Processing failed: %s", exc)
+        error_msg = f"❌ Ошибка: {str(exc)[:300]}\n\nПопробуйте /cancel и пришлите другой материал."
+        try:
+            await status_msg.edit_text(error_msg)
+        except Exception:
+            await message.answer(error_msg)
         await state.set_state(Form.idle)
 
 # ─── Preview callbacks ────────────────────────────────────
