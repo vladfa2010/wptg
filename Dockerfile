@@ -16,9 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code
 COPY . .
 
-# Persistent SQLite volume
+# Ensure data directory exists (Railway Volume mounted at /app/data)
 RUN mkdir -p /app/data
-VOLUME ["/app/data"]
 
 # Non-root user
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
