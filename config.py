@@ -23,7 +23,7 @@ WP_PASSWORD: str = os.environ["WP_PASSWORD"]  # Application Password
 
 # ─── Moonshot API (rewrite + categorization) ──────────────
 MOONSHOT_API_KEY: str = os.environ["MOONSHOT_API_KEY"]
-MOONSHOT_BASE_URL: str = os.environ.get("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
+MOONSHOT_BASE_URL: str = os.environ.get("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
 MOONSHOT_MODEL: str = os.environ.get("MOONSHOT_MODEL", "moonshot-v1-128k")
 
 # ─── Image generation uses the same Moonshot API key ──────

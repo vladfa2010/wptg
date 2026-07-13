@@ -11,7 +11,7 @@ import config
 logger = logging.getLogger(__name__)
 
 # Kimi image generation endpoint (adjust if different)
-_KIMI_IMAGE_URL = "https://api.moonshot.cn/v1/images/generations"
+_KIMI_IMAGE_URL = "https://api.moonshot.ai/v1/images/generations"
 
 
 async def generate_image(title: str, excerpt: str = "") -> bytes | None:
