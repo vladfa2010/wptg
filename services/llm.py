@@ -118,7 +118,7 @@ async def categorize(
         if not terms:
             continue
         line = f"{tax_name}: " + ", ".join(
-            f"{t['id']}={t['name']}" for t in terms[:50]  # Limit per taxonomy
+            f"{t.get('term_id', t.get('id', '?'))}={t['name']}" for t in terms[:50]
         )
         lines.append(line)
 
@@ -155,7 +155,8 @@ Return ONLY JSON with these exact keys (snake_case):
     # Validate: only return IDs that exist in our taxonomy cache
     validated: dict[str, list[int]] = {}
     for tax_key in tax_key_mapping.values():
-        valid_ids = {t["id"] for t in taxonomies.get(tax_key, [])}
+        terms = taxonomies.get(tax_key, [])
+        valid_ids = {t.get("term_id", t.get("id")) for t in terms}
         selected = result.get(tax_key, [])
         if isinstance(selected, list):
             validated[tax_key] = [int(sid) for sid in selected if int(sid) in valid_ids]
