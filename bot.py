@@ -298,6 +298,7 @@ async def cb_publish(callback: types.CallbackQuery, state: FSMContext):
         return
 
     try:
+        logger.info("Creating WP post: title=%s, media=%s", draft["title"], draft.get("featured_media_id", 0) or 0)
         result = await wordpress.create_post({
             "title": draft["title"],
             "content": draft["content"],

@@ -74,10 +74,11 @@ async def upload_media(image_data: bytes, filename: str = "featured.jpg", mime_t
         async with session.post(
             _url("wp/v2/media"), headers=headers, data=image_data
         ) as resp:
-            if resp.status not in (200, 201):
-                text = await resp.text()
-                raise RuntimeError(f"Media upload failed: {resp.status} {text[:200]}")
             data = await resp.json()
+            if resp.status not in (200, 201):
+                raise RuntimeError(f"Media upload failed: {resp.status} {json.dumps(data, ensure_ascii=False)[:500]}")
+            if "id" not in data:
+                raise RuntimeError(f"Media upload response missing 'id': {json.dumps(data, ensure_ascii=False)[:500]}")
             return int(data["id"])
 
 
@@ -111,12 +112,19 @@ async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
 
     async with aiohttp.ClientSession(headers=_HEADERS) as session:
         async with session.post(_url("wp/v2/posts"), json=wp_payload) as resp:
-            if resp.status not in (200, 201):
-                text = await resp.text()
-                raise RuntimeError(f"Post creation failed: {resp.status} {text[:500]}")
             data = await resp.json()
+            if resp.status not in (200, 201):
+                raise RuntimeError(
+                    f"Post creation failed: {resp.status} "
+                    f"{json.dumps(data, ensure_ascii=False)[:1000]}"
+                )
+            if "id" not in data:
+                raise RuntimeError(
+                    f"Post creation response missing 'id': "
+                    f"{json.dumps(data, ensure_ascii=False)[:1000]}"
+                )
             return {
                 "id": data["id"],
-                "url": data["link"],
-                "slug": data["slug"],
+                "url": data.get("link", ""),
+                "slug": data.get("slug", ""),
             }
