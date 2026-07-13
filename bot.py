@@ -88,6 +88,9 @@ def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], al
         "obuchenie": "Обучение", "partnyor": "Партнёр", "tags": "Метка",
     }
 
+    def _match_id(term, tid):
+        return term.get("term_id") == tid or term.get("id") == tid
+
     lines.append("\n🏷 <b>Категории:</b>")
     for key, label in tax_labels.items():
         ids = taxonomies.get(key, [])
@@ -95,7 +98,7 @@ def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], al
             names = []
             for tid in ids:
                 for term in all_terms.get(key, []):
-                    if term["term_id"] == tid or term["id"] == tid:
+                    if _match_id(term, tid):
                         names.append(term["name"])
                         break
             if names:
