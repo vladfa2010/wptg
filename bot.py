@@ -108,17 +108,6 @@ def _shorten(text: str, max_len: int = 3500) -> str:
         return text
     return text[:max_len] + "\n\n... <i>(текст обрезан для превью)</i>"
 
-# ─── Fallback: any text without state ─────────────────────
-@dp.message(F.text)
-async def on_input_fallback(message: types.Message, state: FSMContext):
-    """Handle text when user hasn't used /start yet."""
-    text = message.text.strip()
-    if text.startswith("/"):
-        return  # Let command handlers handle this
-    # Auto-start and process
-    await state.set_state(Form.idle)
-    await on_input(message, state)
-
 # ─── /start ───────────────────────────────────────────────
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -681,6 +670,17 @@ def _get_current_page(reply_markup) -> int:
                 except ValueError:
                     pass
     return 0
+
+# ─── Fallback: any text not handled above ─────────────────
+@dp.message(F.text)
+async def on_input_fallback(message: types.Message, state: FSMContext):
+    """Handle text when user hasn't used /start yet or no state."""
+    text = message.text.strip()
+    if text.startswith("/"):
+        return
+    logger.info("Fallback handler: auto-starting and processing text")
+    await state.set_state(Form.idle)
+    await on_input(message, state)
 
 # ─── Healthcheck HTTP server ──────────────────────────────
 async def _health_server():
