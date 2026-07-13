@@ -26,8 +26,8 @@ MOONSHOT_API_KEY: str = os.environ["MOONSHOT_API_KEY"]
 MOONSHOT_BASE_URL: str = os.environ.get("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
 MOONSHOT_MODEL: str = os.environ.get("MOONSHOT_MODEL", "moonshot-v1-128k")
 
-# ─── Kimi API (image generation) ──────────────────────────
-KIMI_API_KEY: str = os.environ.get("KIMI_API_KEY", "")
+# ─── Image generation uses the same Moonshot API key ──────
+KIMI_API_KEY: str = os.environ.get("KIMI_API_KEY", MOONSHOT_API_KEY)
 
 # ─── File paths ───────────────────────────────────────────
 DATA_DIR = Path(__file__).parent / "data"
