@@ -259,6 +259,7 @@ async def on_input(message: types.Message, state: FSMContext):
         await state.update_data(
             draft_id=draft_id,
             taxonomies=taxonomies,
+            source_url=source_url,
         )
         await state.set_state(Form.preview)
 
@@ -371,16 +372,30 @@ async def cb_cancel(callback: types.CallbackQuery, state: FSMContext):
 async def cb_regenerate(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer("Перегенерация...")
     data = await state.get_data()
+    source_url = data.get("source_url", "")
     if data.get("draft_id"):
         await database.delete_draft(data["draft_id"])
 
-    # Get original text back... we need to store it
-    # For now just go back to idle
-    await state.clear()
-    await state.set_state(Form.idle)
-    await callback.message.edit_text(
-        "🔄 Готово к новой генерации. Пришлите ссылку или текст."
-    )
+    if source_url:
+        # Re-process the same URL
+        await state.set_state(Form.idle)
+        await callback.message.edit_text("🔄 Перегенерация...")
+        # Create a fake message to reuse on_input
+        from aiogram.types import Message
+        fake_msg = Message(
+            message_id=callback.message.message_id,
+            date=callback.message.date,
+            chat=callback.message.chat,
+            text=source_url,
+            from_user=callback.from_user,
+        )
+        await on_input(fake_msg, state)
+    else:
+        await state.clear()
+        await state.set_state(Form.idle)
+        await callback.message.edit_text(
+            "🔄 Готово к новой генерации. Пришлите ссылку или текст."
+        )
 
 # ─── Edit Text flow ───────────────────────────────────────
 @dp.callback_query(Form.preview, PreviewAction.filter(F.action == "edit_text"))
@@ -707,16 +722,35 @@ def _get_current_page(reply_markup) -> int:
                     pass
     return 0
 
-# ─── Fallback: any text not handled above ─────────────────
-@dp.message(F.text)
-async def on_input_fallback(message: types.Message, state: FSMContext):
-    """Handle text when user hasn't used /start yet or no state."""
+# ─── Fallback: only when in idle or no state ──────────────
+@dp.message(Form.idle, F.text)
+async def on_input_idle_fallback(message: types.Message, state: FSMContext):
+    """Handle text when explicitly in idle state."""
     text = message.text.strip()
     if text.startswith("/"):
         return
-    logger.info("Fallback handler: auto-starting and processing text")
+    logger.info("Idle fallback: processing text")
+    await on_input(message, state)
+
+
+@dp.message(F.text)
+async def on_input_no_state_fallback(message: types.Message, state: FSMContext):
+    """Handle text when no state is set (first interaction without /start)."""
+    current_state = await state.get_state()
+    if current_state is not None:
+        return  # Let state-specific handlers deal with it
+    text = message.text.strip()
+    if text.startswith("/"):
+        return
+    logger.info("No-state fallback: auto-starting and processing text")
     await state.set_state(Form.idle)
     await on_input(message, state)
+
+
+# ─── Noop callback (pagination indicator) ─────────────────
+@dp.callback_query(F.data == "noop")
+async def cb_noop(callback: types.CallbackQuery):
+    await callback.answer()
 
 # ─── Healthcheck HTTP server ──────────────────────────────
 async def _health_server():
