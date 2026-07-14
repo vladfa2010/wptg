@@ -310,6 +310,81 @@ async def on_input(message: types.Message, state: FSMContext):
             await message.answer(error_msg)
         await state.set_state(Form.idle)
 
+
+# ─── Inline correction via text in preview state ──────────
+@dp.message(Form.preview, F.text)
+async def on_inline_correction(message: types.Message, state: FSMContext):
+    """User sends a text correction while in preview — rewrite via LLM."""
+    correction = message.text.strip()
+    if correction.startswith("/"):
+        return
+    if len(correction) < 3:
+        await message.answer("⚠️ Слишком коротко. Опишите подробнее что изменить.")
+        return
+
+    status_msg = await message.answer("⏳ Вношу правки...")
+    try:
+        data = await state.get_data()
+        draft = await database.get_draft(data["draft_id"])
+
+        # Build correction prompt
+        system_prompt = (
+            "You are an editor. Given an article and a user's correction request, "
+            "modify the article accordingly. Preserve HTML tags. Output strict JSON: "
+            '{"title": "...", "content": "...", "excerpt": "..."}'
+        )
+        user_prompt = (
+            f"Current article title: {draft['title']}\n\n"
+            f"Current excerpt: {draft['excerpt']}\n\n"
+            f"Current content:\n{draft['content'][:4000]}\n\n"
+            f"User's correction request: {correction}\n\n"
+            f"Return ONLY JSON with keys: title, content, excerpt. "
+            f"Content must be valid HTML. Language: Russian."
+        )
+
+        import services.llm as llm_service
+        raw = await llm_service._chat([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ])
+        result = llm_service._extract_json(raw)
+
+        new_title = result.get("title", draft["title"])
+        new_content = result.get("content", draft["content"])
+        new_excerpt = result.get("excerpt", draft["excerpt"])
+
+        # Update draft
+        await database.update_draft(
+            data["draft_id"],
+            title=new_title,
+            content=new_content,
+            excerpt=new_excerpt,
+        )
+
+        # Show updated preview
+        draft = await database.get_draft(data["draft_id"])
+        all_terms = await database.get_all_active_taxonomies()
+        preview = _preview_text(draft["title"], draft["excerpt"], draft["taxonomies"], all_terms)
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
+                types.InlineKeyboardButton(text="✏️ Текст", callback_data=PreviewAction(action="edit_text").pack()),
+            ],
+            [
+                types.InlineKeyboardButton(text="🏷 Категории", callback_data=PreviewAction(action="edit_categories").pack()),
+                types.InlineKeyboardButton(text="🔄 Заново", callback_data=PreviewAction(action="regenerate").pack()),
+            ],
+            [
+                types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack()),
+            ],
+        ])
+        await status_msg.edit_text(f"✏️ <b>Правка применена</b>\n\n{preview}", parse_mode="HTML", reply_markup=kb)
+
+    except Exception as exc:
+        logger.exception("Inline correction failed: %s", exc)
+        await status_msg.edit_text(f"❌ Не удалось применить правку: {str(exc)[:200]}\n\nПопробуйте ещё раз или используйте кнопки.")
+
+
 # ─── Preview callbacks ────────────────────────────────────
 @dp.callback_query(Form.preview, PreviewAction.filter(F.action == "publish"))
 async def cb_publish(callback: types.CallbackQuery, state: FSMContext):
