@@ -96,22 +96,10 @@ async def categorize(
     taxonomies: {taxonomy_name: [{"id": int, "name": str, "slug": str, "count": int}, ...]}
     Returns: {taxonomy_name: [term_id, ...]}
     """
-    # Build compact taxonomy reference
+    # Build compact taxonomy reference — dynamically from discovered taxonomies
     lines: list[str] = []
     tax_key_mapping: dict[str, str] = {
-        "categories": "categories",
-        "tags": "tags",
-        "industriya": "industriya",
-        "kompaniya": "kompaniya",
-        "tiker": "tiker",
-        "trend": "trend",
-        "strategiya-investirovaniya": "strategiya_investirovaniya",
-        "stadiya-sdelki": "stadiya_sdelki",
-        "stadiya-proekta": "stadiya_proekta",
-        "etapy-sdelki": "etapy_sdelki",
-        "klassifikaciya-po-rynkam": "klassifikaciya_po_rynkam",
-        "obuchenie": "obuchenie",
-        "partnyor": "partnyor",
+        slug: slug for slug in taxonomies.keys()
     }
 
     for tax_name, terms in taxonomies.items():

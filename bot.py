@@ -82,8 +82,8 @@ class EditBack(CallbackData, prefix="editback"):
 def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], all_terms: dict[str, list[dict[str, Any]]]) -> str:
     lines = [f"📋 <b>ПРЕВЬЮ ПУБЛИКАЦИИ</b>\n", f"📰 {title}", f"\n📝 {excerpt or '(без описания)'}"]
 
-    # Build human-readable taxonomy summary
-    tax_labels = {
+    # Known labels for common taxonomies + dynamic fallback for new ones
+    _KNOWN_LABELS = {
         "categories": "Рубрика", "industriya": "Индустрия", "kompaniya": "Компания",
         "tiker": "Тикер", "trend": "Тренд", "strategiya_investirovaniya": "Стратегия",
         "stadiya_sdelki": "Стадия сделки", "stadiya_proekta": "Стадия проекта",
@@ -95,7 +95,7 @@ def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], al
         return term.get("term_id") == tid or term.get("id") == tid
 
     lines.append("\n🏷 <b>Категории:</b>")
-    for key, label in tax_labels.items():
+    for key in all_terms.keys():
         ids = taxonomies.get(key, [])
         if ids:
             names = []
@@ -105,6 +105,7 @@ def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], al
                         names.append(term["name"])
                         break
             if names:
+                label = _KNOWN_LABELS.get(key, key.replace("-", " ").replace("_", " ").title())
                 lines.append(f"   <i>{label}:</i> {', '.join(names)}")
 
     return "\n".join(lines)
@@ -157,8 +158,14 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 # ─── /sync ────────────────────────────────────────────────
 @dp.message(Command("sync"))
 async def cmd_sync(message: types.Message, state: FSMContext):
-    status = await message.answer("🔄 Синхронизация таксономий...")
+    status = await message.answer("🔄 Обнаружение таксономий...")
     try:
+        # Step 1: Discover all taxonomies dynamically from WP
+        discovered = await wordpress.discover_taxonomies()
+        tax_count = len(discovered)
+        await status.edit_text(f"📡 Найдено {tax_count} таксономий. Синхронизация терминов...")
+
+        # Step 2: Sync all terms
         taxonomies = await wordpress.sync_taxonomies()
         await database.clear_taxonomy_cache()
         for tax_name, terms in taxonomies.items():
@@ -689,8 +696,9 @@ async def cb_edit_categories(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer("Редактирование категорий")
     await state.set_state(Form.editing_categories)
 
-    # Build taxonomy selection keyboard
-    tax_labels = {
+    # Dynamically build taxonomy selection from cache
+    all_terms = await database.get_all_active_taxonomies()
+    _KNOWN_LABELS = {
         "categories": "Рубрики", "industriya": "Индустрии", "kompaniya": "Компании",
         "tiker": "Тикеры", "trend": "Тренды", "strategiya-investirovaniya": "Стратегии",
         "stadiya-sdelki": "Стадии сделки", "stadiya-proekta": "Стадии проекта",
@@ -700,7 +708,8 @@ async def cb_edit_categories(callback: types.CallbackQuery, state: FSMContext):
 
     buttons = []
     row = []
-    for tax_key, label in tax_labels.items():
+    for tax_key in all_terms.keys():
+        label = _KNOWN_LABELS.get(tax_key, tax_key.replace("-", " ").replace("_", " ").title())
         row.append(types.InlineKeyboardButton(
             text=label, callback_data=TaxonomySelect(taxonomy=tax_key).pack()
         ))
@@ -800,14 +809,14 @@ async def _show_term_page(callback: types.CallbackQuery, state: FSMContext, taxo
         ),
     ])
 
-    tax_labels = {
+    _KNOWN_LABELS = {
         "categories": "Рубрики", "industriya": "Индустрии", "kompaniya": "Компании",
         "tiker": "Тикеры", "trend": "Тренды", "strategiya-investirovaniya": "Стратегии",
         "stadiya-sdelki": "Стадии сделки", "stadiya-proekta": "Стадии проекта",
         "etapy-sdelki": "Этапы сделки", "klassifikaciya-po-rynkam": "Рынки",
         "obuchenie": "Обучение", "partnyor": "Партнёры", "tags": "Метки",
     }
-    label = tax_labels.get(taxonomy, taxonomy)
+    label = _KNOWN_LABELS.get(taxonomy, taxonomy.replace("-", " ").replace("_", " ").title())
 
     await callback.message.edit_text(
         f"🏷 <b>{label}</b> (стр. {page + 1}/{total_pages})\n\n"

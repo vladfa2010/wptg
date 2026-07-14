@@ -24,32 +24,40 @@ _MEDIA_HEADERS = {
     # Content-Type set per-request for multipart
 }
 
-_TAXONOMY_ENDPOINTS: list[tuple[str, str]] = [
-    ("categories", "wp/v2/categories"),
-    ("tags", "wp/v2/tags"),
-    ("industriya", "wp/v2/industriya"),
-    ("kompaniya", "wp/v2/kompaniya"),
-    ("tiker", "wp/v2/tiker"),
-    ("trend", "wp/v2/trend"),
-    ("strategiya-investirovaniya", "wp/v2/strategiya-investirovaniya"),
-    ("stadiya-sdelki", "wp/v2/stadiya-sdelki"),
-    ("stadiya-proekta", "wp/v2/stadiya-proekta"),
-    ("etapy-sdelki", "wp/v2/etapy-sdelki"),
-    ("klassifikaciya-po-rynkam", "wp/v2/klassifikaciya-po-rynkam"),
-    ("obuchenie", "wp/v2/obuchenie"),
-    ("partnyor", "wp/v2/partnyor"),
-]
+# Internal taxonomy list — will be auto-discovered from WP
+_DISCOVERED_TAXONOMIES: list[tuple[str, str]] = []
 
 
 def _url(path: str) -> str:
     return f"{config.WP_BASE_URL}/wp-json/{path}"
 
 
+async def discover_taxonomies() -> list[tuple[str, str]]:
+    """Dynamically fetch all public taxonomies from WP REST API."""
+    global _DISCOVERED_TAXONOMIES
+    async with aiohttp.ClientSession(headers=_HEADERS) as session:
+        async with session.get(_url("wp/v2/taxonomies")) as resp:
+            if resp.status != 200:
+                # Fallback to empty if discovery fails
+                return _DISCOVERED_TAXONOMIES
+            data = await resp.json()
+            taxonomies: list[tuple[str, str]] = []
+            for slug, info in data.items():
+                # Only include taxonomies that are public and have REST support
+                if not info.get("_links", {}).get("collection"):
+                    continue
+                rest_base = info.get("rest_base", slug)
+                taxonomies.append((slug, f"wp/v2/{rest_base}"))
+            _DISCOVERED_TAXONOMIES = taxonomies
+            return taxonomies
+
+
 async def sync_taxonomies() -> dict[str, list[dict[str, Any]]]:
     """Fetch all taxonomy terms from WP and return them grouped by taxonomy."""
     result: dict[str, list[dict[str, Any]]] = {}
+    endpoints = _DISCOVERED_TAXONOMIES or await discover_taxonomies()
     async with aiohttp.ClientSession(headers=_HEADERS) as session:
-        for tax_key, endpoint in _TAXONOMY_ENDPOINTS:
+        for tax_key, endpoint in endpoints:
             url = _url(f"{endpoint}?per_page=100")
             async with session.get(url) as resp:
                 if resp.status != 200:
@@ -135,20 +143,12 @@ async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
     if featured_media and featured_media > 0:
         wp_payload["featured_media"] = featured_media
 
-    # Only add non-empty taxonomy arrays
-    snake_map = {
-        "categories": "categories", "tags": "tags",
-        "industriya": "industriya", "kompaniya": "kompaniya",
-        "tiker": "tiker", "trend": "trend",
-        "strategiya-investirovaniya": "strategiya_investirovaniya",
-        "stadiya-sdelki": "stadiya_sdelki", "stadiya-proekta": "stadiya_proekta",
-        "etapy-sdelki": "etapy_sdelki", "klassifikaciya-po-rynkam": "klassifikaciya_po_rynkam",
-        "obuchenie": "obuchenie", "partnyor": "partnyor",
-    }
-    for wp_key, snake_key in snake_map.items():
-        val = payload.get(snake_key, [])
+    # Dynamically add non-empty taxonomy arrays
+    endpoints = _DISCOVERED_TAXONOMIES or []
+    for tax_slug, _ in endpoints:
+        val = payload.get(tax_slug, [])
         if val:
-            wp_payload[wp_key] = val
+            wp_payload[tax_slug] = val
 
     timeout = aiohttp.ClientTimeout(total=60, connect=10)
     async with aiohttp.ClientSession(headers=_HEADERS, timeout=timeout) as session:
