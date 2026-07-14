@@ -102,29 +102,42 @@ async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
     Payload must include: title, content, excerpt, status,
     plus all taxonomy fields (categories, tags, industriya, ...).
     """
-    # Ensure proper field names for WP REST API
-    wp_payload = {
+    # Build minimal payload — only non-empty fields to reduce size
+    wp_payload: dict[str, Any] = {
         "title": payload["title"],
         "content": payload["content"],
         "excerpt": payload.get("excerpt", ""),
         "status": payload.get("status", "publish"),
-        "featured_media": payload.get("featured_media", 0),
-        "categories": payload.get("categories", []),
-        "tags": payload.get("tags", []),
-        "industriya": payload.get("industriya", []),
-        "kompaniya": payload.get("kompaniya", []),
-        "tiker": payload.get("tiker", []),
-        "trend": payload.get("trend", []),
-        "strategiya-investirovaniya": payload.get("strategiya_investirovaniya", []),
-        "stadiya-sdelki": payload.get("stadiya_sdelki", []),
-        "stadiya-proekta": payload.get("stadiya_proekta", []),
-        "etapy-sdelki": payload.get("etapy_sdelki", []),
-        "klassifikaciya-po-rynkam": payload.get("klassifikaciya_po_rynkam", []),
-        "obuchenie": payload.get("obuchenie", []),
-        "partnyor": payload.get("partnyor", []),
     }
 
-    async with aiohttp.ClientSession(headers=_HEADERS) as session:
+    # Only add featured_media if valid (> 0)
+    featured_media = payload.get("featured_media", 0)
+    if featured_media and featured_media > 0:
+        wp_payload["featured_media"] = featured_media
+
+    # Only add non-empty taxonomy arrays
+    tax_fields = [
+        "categories", "tags", "industriya", "kompaniya", "tiker", "trend",
+        "strategiya-investirovaniya", "stadiya-sdelki", "stadiya-proekta",
+        "etapy-sdelki", "klassifikaciya-po-rynkam", "obuchenie", "partnyor",
+    ]
+    snake_map = {
+        "categories": "categories", "tags": "tags",
+        "industriya": "industriya", "kompaniya": "kompaniya",
+        "tiker": "tiker", "trend": "trend",
+        "strategiya-investirovaniya": "strategiya_investirovaniya",
+        "stadiya-sdelki": "stadiya_sdelki", "stadiya-proekta": "stadiya_proekta",
+        "etapy-sdelki": "etapy_sdelki", "klassifikaciya-po-rynkam": "klassifikaciya_po_rynkam",
+        "obuchenie": "obuchenie", "partnyor": "partnyor",
+    }
+    for wp_key, snake_key in snake_map.items():
+        val = payload.get(snake_key, [])
+        if val:
+            wp_payload[wp_key] = val
+
+    # Timeout for large payloads
+    timeout = aiohttp.ClientTimeout(total=60, connect=10)
+    async with aiohttp.ClientSession(headers=_HEADERS, timeout=timeout) as session:
         async with session.post(_url("wp/v2/posts"), json=wp_payload) as resp:
             data = await resp.json()
             if resp.status not in (200, 201):
