@@ -281,7 +281,12 @@ async def on_input(message: types.Message, state: FSMContext):
             [types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack())],
         ])
 
-        # Delete status message
+        # Show text volume first
+        content_len = len(content)
+        await status_msg.edit_text(f"📊 Объём текста: <b>{content_len}</b> символов")
+
+        # Delete status message after a brief moment so user sees the stat
+        await asyncio.sleep(1)
         await status_msg.delete()
 
         # Send full article content — split if too long for one message
