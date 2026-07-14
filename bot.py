@@ -269,8 +269,10 @@ async def on_input(message: types.Message, state: FSMContext):
         # Reload draft from DB to ensure all fields are present
         draft = await database.get_draft(draft_id)
 
-        # Show preview with optional image
-        preview = _preview_text(draft["title"], draft["excerpt"], draft["taxonomies"], all_terms)
+        # Show full article text + categories + buttons
+        content = draft["content"]
+        tax_summary = _preview_text(draft["title"], "", draft["taxonomies"], all_terms)
+
         kb = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack())],
             [types.InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=PreviewAction(action="edit_text").pack())],
@@ -279,24 +281,57 @@ async def on_input(message: types.Message, state: FSMContext):
             [types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack())],
         ])
 
-        # Try to show image with preview
-        media_id = draft.get("featured_media_id") or 0
-        if media_id:
-            try:
-                media = await wordpress.get_media(media_id)
-                if media.get("url"):
-                    await status_msg.delete()
-                    await message.answer_photo(
-                        photo=media["url"],
-                        caption=preview,
-                        parse_mode="HTML",
-                        reply_markup=kb,
-                    )
-                    return
-            except Exception as img_exc:
-                logger.warning("Failed to show image in preview: %s", img_exc)
+        # Delete status message
+        await status_msg.delete()
 
-        await status_msg.edit_text(preview, parse_mode="HTML", reply_markup=kb)
+        # Send full article content — split if too long for one message
+        header = f"📰 <b>{draft['title']}</b>\n\n"
+        max_msg = 3800  # Leave room for header
+
+        if len(content) <= max_msg:
+            # Everything fits in one message
+            full_preview = header + content + "\n\n" + tax_summary
+            # Try image first
+            media_id = draft.get("featured_media_id") or 0
+            if media_id:
+                try:
+                    media = await wordpress.get_media(media_id)
+                    if media.get("url"):
+                        await message.answer_photo(
+                            photo=media["url"],
+                            caption=full_preview[:1024],  # Photo caption limit
+                            parse_mode="HTML",
+                        )
+                        # Send rest of text + buttons as separate message
+                        if len(full_preview) > 1024:
+                            await message.answer(
+                                full_preview[1024:],
+                                parse_mode="HTML",
+                                reply_markup=kb,
+                            )
+                        else:
+                            await message.answer(
+                                tax_summary,
+                                parse_mode="HTML",
+                                reply_markup=kb,
+                            )
+                        return
+                except Exception as img_exc:
+                    logger.warning("Failed to show image: %s", img_exc)
+            # No image — text only
+            await message.answer(full_preview, parse_mode="HTML", reply_markup=kb)
+        else:
+            # Split content across multiple messages
+            await message.answer(header + content[:max_msg], parse_mode="HTML")
+            remaining = content[max_msg:]
+            while remaining:
+                chunk = remaining[:max_msg]
+                remaining = remaining[max_msg:]
+                if remaining:
+                    await message.answer(chunk, parse_mode="HTML")
+                else:
+                    # Last chunk — add categories and buttons
+                    await message.answer(chunk + "\n\n" + tax_summary, parse_mode="HTML", reply_markup=kb)
 
     except Exception as exc:
         logger.exception("Processing failed: %s", exc)
