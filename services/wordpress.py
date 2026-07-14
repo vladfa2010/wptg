@@ -96,13 +96,34 @@ async def get_media(media_id: int) -> dict[str, Any]:
             }
 
 
+# Category ID → Custom Post Type endpoint mapping
+_CATEGORY_CPT_MAP: dict[int, str] = {
+    98:   "novost",      # Новости
+    128:  "sobytie",     # Событие
+    249:  "analitika",   # Аналитика
+    129:  "interesnoe",  # Интересное
+    296:  "kompaniya-p", # Компания
+    107:  "trends",      # Тренды
+}
+_DEFAULT_CPT = "novost"  # fallback
+
+
+def _resolve_cpt_endpoint(categories: list[int]) -> str:
+    """Determine CPT endpoint from first known category, fallback to novost."""
+    for cat_id in categories:
+        if cat_id in _CATEGORY_CPT_MAP:
+            return _CATEGORY_CPT_MAP[cat_id]
+    return _DEFAULT_CPT
+
+
 async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
     """
-    Create a WordPress post.
-    Payload must include: title, content, excerpt, status,
-    plus all taxonomy fields (categories, tags, industriya, ...).
+    Create a WordPress post in the correct Custom Post Type.
+    Determines CPT from selected category (default: novost).
     """
-    # Build minimal payload — only non-empty fields to reduce size
+    categories = payload.get("categories", [])
+    cpt_endpoint = _resolve_cpt_endpoint(categories)
+
     wp_payload: dict[str, Any] = {
         "title": payload["title"],
         "content": payload["content"],
@@ -110,17 +131,11 @@ async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
         "status": payload.get("status", "publish"),
     }
 
-    # Only add featured_media if valid (> 0)
     featured_media = payload.get("featured_media", 0)
     if featured_media and featured_media > 0:
         wp_payload["featured_media"] = featured_media
 
     # Only add non-empty taxonomy arrays
-    tax_fields = [
-        "categories", "tags", "industriya", "kompaniya", "tiker", "trend",
-        "strategiya-investirovaniya", "stadiya-sdelki", "stadiya-proekta",
-        "etapy-sdelki", "klassifikaciya-po-rynkam", "obuchenie", "partnyor",
-    ]
     snake_map = {
         "categories": "categories", "tags": "tags",
         "industriya": "industriya", "kompaniya": "kompaniya",
@@ -135,14 +150,13 @@ async def create_post(payload: dict[str, Any]) -> dict[str, Any]:
         if val:
             wp_payload[wp_key] = val
 
-    # Timeout for large payloads
     timeout = aiohttp.ClientTimeout(total=60, connect=10)
     async with aiohttp.ClientSession(headers=_HEADERS, timeout=timeout) as session:
-        async with session.post(_url("wp/v2/posts"), json=wp_payload) as resp:
+        async with session.post(_url(f"wp/v2/{cpt_endpoint}"), json=wp_payload) as resp:
             data = await resp.json()
             if resp.status not in (200, 201):
                 raise RuntimeError(
-                    f"Post creation failed: {resp.status} "
+                    f"Post creation failed (CPT={cpt_endpoint}): {resp.status} "
                     f"{json.dumps(data, ensure_ascii=False)[:1000]}"
                 )
             if "id" not in data:
