@@ -485,9 +485,8 @@ async def cb_edit_title(callback: types.CallbackQuery, state: FSMContext):
     draft = await database.get_draft(data["draft_id"])
     await state.set_state(Form.editing_title)
     await callback.message.edit_text(
-        f"📰 <b>Текущий заголовок:</b>\n{draft['title']}\n\n"
+        f"📰 Текущий заголовок:\n\n{draft['title']}\n\n"
         f"Пришлите новый заголовок (или /skip):",
-        parse_mode="HTML",
     )
 
 @dp.message(Form.editing_title)
@@ -521,13 +520,20 @@ async def cb_edit_content(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
-    content_len = len(draft["content"])
+    content = draft["content"]
+    content_len = len(content)
     await state.set_state(Form.editing_content)
-    # Use parse_mode=None to avoid conflicts with HTML tags in existing content
-    await callback.message.edit_text(
-        f"📝 Текущий контент ({content_len} символов)\n\n"
-        f"Пришлите новый текст (поддерживается HTML):",
-    )
+
+    # Send full content — split into multiple messages if very long
+    header = f"📝 Текущий контент ({content_len} символов)\n\nПришлите новый текст (поддерживается HTML):\n\n---ТЕКУЩИЙ ТЕКСТ---\n\n"
+    if content_len < 3500:
+        await callback.message.edit_text(
+            header + content,
+        )
+    else:
+        await callback.message.edit_text(header)
+        # Send remaining content as plain text (no HTML parse to avoid tag conflicts)
+        await callback.message.answer(content)
 
 @dp.message(Form.editing_content)
 async def on_edit_content(message: types.Message, state: FSMContext):
@@ -562,9 +568,8 @@ async def cb_edit_excerpt(callback: types.CallbackQuery, state: FSMContext):
     draft = await database.get_draft(data["draft_id"])
     await state.set_state(Form.editing_excerpt)
     await callback.message.edit_text(
-        f"📄 <b>Текущий excerpt:</b>\n{draft['excerpt'] or '(пусто)'}\n\n"
+        f"📄 Текущий excerpt:\n\n{draft['excerpt'] or '(пусто)'}\n\n"
         f"Пришлите новый excerpt (или /skip):",
-        parse_mode="HTML",
     )
 
 @dp.message(Form.editing_excerpt)
