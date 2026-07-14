@@ -75,6 +75,9 @@ class TermPage(CallbackData, prefix="tpage"):
 class CatBack(CallbackData, prefix="catback"):
     action: str  # to_taxonomies, to_preview
 
+class EditBack(CallbackData, prefix="editback"):
+    target: str  # text_field, preview
+
 # ─── Helpers ──────────────────────────────────────────────
 def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], all_terms: dict[str, list[dict[str, Any]]]) -> str:
     lines = [f"📋 <b>ПРЕВЬЮ ПУБЛИКАЦИИ</b>\n", f"📰 {title}", f"\n📝 {excerpt or '(без описания)'}"]
@@ -477,6 +480,21 @@ async def cb_edit_text(callback: types.CallbackQuery, state: FSMContext):
 async def cb_text_back(callback: types.CallbackQuery, state: FSMContext):
     await _return_to_preview(callback, state)
 
+@dp.callback_query(Form.editing_title, EditBack.filter(F.target == "text_field"))
+@dp.callback_query(Form.editing_content, EditBack.filter(F.target == "text_field"))
+@dp.callback_query(Form.editing_excerpt, EditBack.filter(F.target == "text_field"))
+async def cb_edit_back(callback: types.CallbackQuery, state: FSMContext):
+    """Back button from title/content/excerpt editing → return to text field selection."""
+    await callback.answer("Назад")
+    await state.set_state(Form.editing_text_field)
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack())],
+        [types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack())],
+        [types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack())],
+        [types.InlineKeyboardButton(text="↩️ Назад к превью", callback_data=TextFieldAction(field="back").pack())],
+    ])
+    await callback.message.edit_text("✏️ <b>Редактирование текста</b>\n\nЧто изменить?", parse_mode="HTML", reply_markup=kb)
+
 @dp.callback_query(Form.editing_text_field, TextFieldAction.filter(F.field == "title"))
 async def cb_edit_title(callback: types.CallbackQuery, state: FSMContext):
     logger.info("cb_edit_title called")
@@ -484,9 +502,13 @@ async def cb_edit_title(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
     await state.set_state(Form.editing_title)
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="↩️ Назад", callback_data=EditBack(target="text_field").pack())],
+    ])
     await callback.message.edit_text(
         f"📰 Текущий заголовок:\n\n{draft['title']}\n\n"
         f"Пришлите новый заголовок (или /skip):",
+        reply_markup=kb,
     )
 
 @dp.message(Form.editing_title)
@@ -525,13 +547,17 @@ async def cb_edit_content(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Form.editing_content)
 
     # Send full content — split into multiple messages if very long
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="↩️ Назад", callback_data=EditBack(target="text_field").pack())],
+    ])
     header = f"📝 Текущий контент ({content_len} символов)\n\nПришлите новый текст (поддерживается HTML):\n\n---ТЕКУЩИЙ ТЕКСТ---\n\n"
     if content_len < 3500:
         await callback.message.edit_text(
             header + content,
+            reply_markup=kb,
         )
     else:
-        await callback.message.edit_text(header)
+        await callback.message.edit_text(header, reply_markup=kb)
         # Send remaining content as plain text (no HTML parse to avoid tag conflicts)
         await callback.message.answer(content)
 
@@ -567,9 +593,13 @@ async def cb_edit_excerpt(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     draft = await database.get_draft(data["draft_id"])
     await state.set_state(Form.editing_excerpt)
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="↩️ Назад", callback_data=EditBack(target="text_field").pack())],
+    ])
     await callback.message.edit_text(
         f"📄 Текущий excerpt:\n\n{draft['excerpt'] or '(пусто)'}\n\n"
         f"Пришлите новый excerpt (или /skip):",
+        reply_markup=kb,
     )
 
 @dp.message(Form.editing_excerpt)
