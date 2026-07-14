@@ -307,9 +307,19 @@ async def on_input(message: types.Message, state: FSMContext):
         content_len = len(content)
         await status_msg.edit_text(f"📊 Объём текста: <b>{content_len}</b> символов")
 
+        # Show LLM-determined taxonomies as separate message
+        tax_summary_llm = _preview_text(draft["title"], "", taxonomies, all_terms)
+        await message.answer(
+            f"🤖 <b>LLM определила таксономию:</b>\n{tax_summary_llm}",
+            parse_mode="HTML",
+        )
+
         # Delete status message after a brief moment so user sees the stat
         await asyncio.sleep(1)
-        await status_msg.delete()
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
 
         # Send full article content — strip HTML for Telegram display
         plain_content = _strip_tags(content)
@@ -318,7 +328,7 @@ async def on_input(message: types.Message, state: FSMContext):
 
         if len(plain_content) <= max_msg:
             # Everything fits in one message
-            full_preview = header + plain_content + "\n\n" + tax_summary
+            full_preview = header + plain_content
             # Try image first
             media_id = draft.get("featured_media_id") or 0
             if media_id:
@@ -358,8 +368,8 @@ async def on_input(message: types.Message, state: FSMContext):
                 if remaining:
                     await message.answer(chunk, parse_mode="HTML")
                 else:
-                    # Last chunk — add categories and buttons
-                    await message.answer(chunk + "\n\n" + tax_summary, parse_mode="HTML", reply_markup=kb)
+                    # Last chunk — add buttons
+                    await message.answer(chunk, parse_mode="HTML", reply_markup=kb)
 
     except Exception as exc:
         logger.exception("Processing failed: %s", exc)
