@@ -109,6 +109,21 @@ def _preview_text(title: str, excerpt: str, taxonomies: dict[str, list[int]], al
 
     return "\n".join(lines)
 
+def _strip_tags(html_text: str) -> str:
+    """Remove HTML tags for safe Telegram display. Block tags → newlines."""
+    import re
+    # Replace block-level tags with double newline
+    text = re.sub(r'</?(p|div|h[1-6]|li|tr)[^>]*>', '\n\n', html_text, flags=re.IGNORECASE)
+    # Replace <br> with single newline
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    # Remove remaining tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decode common entities
+    text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'")
+    # Collapse multiple newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
 def _shorten(text: str, max_len: int = 3500) -> str:
     if len(text) <= max_len:
         return text
@@ -289,13 +304,14 @@ async def on_input(message: types.Message, state: FSMContext):
         await asyncio.sleep(1)
         await status_msg.delete()
 
-        # Send full article content — split if too long for one message
+        # Send full article content — strip HTML for Telegram display
+        plain_content = _strip_tags(content)
         header = f"📰 <b>{draft['title']}</b>\n\n"
-        max_msg = 3800  # Leave room for header
+        max_msg = 3800
 
-        if len(content) <= max_msg:
+        if len(plain_content) <= max_msg:
             # Everything fits in one message
-            full_preview = header + content + "\n\n" + tax_summary
+            full_preview = header + plain_content + "\n\n" + tax_summary
             # Try image first
             media_id = draft.get("featured_media_id") or 0
             if media_id:
@@ -327,8 +343,8 @@ async def on_input(message: types.Message, state: FSMContext):
             await message.answer(full_preview, parse_mode="HTML", reply_markup=kb)
         else:
             # Split content across multiple messages
-            await message.answer(header + content[:max_msg], parse_mode="HTML")
-            remaining = content[max_msg:]
+            await message.answer(header + plain_content[:max_msg], parse_mode="HTML")
+            remaining = plain_content[max_msg:]
             while remaining:
                 chunk = remaining[:max_msg]
                 remaining = remaining[max_msg:]
