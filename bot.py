@@ -269,17 +269,11 @@ async def on_input(message: types.Message, state: FSMContext):
         # Show preview with optional image
         preview = _preview_text(draft["title"], draft["excerpt"], draft["taxonomies"], all_terms)
         kb = types.InlineKeyboardMarkup(inline_keyboard=[
-            [
-                types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
-                types.InlineKeyboardButton(text="✏️ Текст", callback_data=PreviewAction(action="edit_text").pack()),
-            ],
-            [
-                types.InlineKeyboardButton(text="🏷 Категории", callback_data=PreviewAction(action="edit_categories").pack()),
-                types.InlineKeyboardButton(text="🔄 Заново", callback_data=PreviewAction(action="regenerate").pack()),
-            ],
-            [
-                types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack()),
-            ],
+            [types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack())],
+            [types.InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=PreviewAction(action="edit_text").pack())],
+            [types.InlineKeyboardButton(text="🏷 Редактировать категории", callback_data=PreviewAction(action="edit_categories").pack())],
+            [types.InlineKeyboardButton(text="🔄 Сгенерировать заново", callback_data=PreviewAction(action="regenerate").pack())],
+            [types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack())],
         ])
 
         # Try to show image with preview
@@ -366,17 +360,11 @@ async def on_inline_correction(message: types.Message, state: FSMContext):
         all_terms = await database.get_all_active_taxonomies()
         preview = _preview_text(draft["title"], draft["excerpt"], draft["taxonomies"], all_terms)
         kb = types.InlineKeyboardMarkup(inline_keyboard=[
-            [
-                types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
-                types.InlineKeyboardButton(text="✏️ Текст", callback_data=PreviewAction(action="edit_text").pack()),
-            ],
-            [
-                types.InlineKeyboardButton(text="🏷 Категории", callback_data=PreviewAction(action="edit_categories").pack()),
-                types.InlineKeyboardButton(text="🔄 Заново", callback_data=PreviewAction(action="regenerate").pack()),
-            ],
-            [
-                types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack()),
-            ],
+            [types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack())],
+            [types.InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=PreviewAction(action="edit_text").pack())],
+            [types.InlineKeyboardButton(text="🏷 Редактировать категории", callback_data=PreviewAction(action="edit_categories").pack())],
+            [types.InlineKeyboardButton(text="🔄 Сгенерировать заново", callback_data=PreviewAction(action="regenerate").pack())],
+            [types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack())],
         ])
         await status_msg.edit_text(f"✏️ <b>Правка применена</b>\n\n{preview}", parse_mode="HTML", reply_markup=kb)
 
@@ -478,14 +466,10 @@ async def cb_edit_text(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer("Редактирование текста")
     await state.set_state(Form.editing_text_field)
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack()),
-            types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack()),
-        ],
-        [
-            types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack()),
-            types.InlineKeyboardButton(text="↩️ Назад", callback_data=TextFieldAction(field="back").pack()),
-        ],
+        [types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack())],
+        [types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack())],
+        [types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack())],
+        [types.InlineKeyboardButton(text="↩️ Назад к превью", callback_data=TextFieldAction(field="back").pack())],
     ])
     await callback.message.edit_text("✏️ <b>Редактирование текста</b>\n\nЧто изменить?", parse_mode="HTML", reply_markup=kb)
 
@@ -524,14 +508,10 @@ async def on_edit_title(message: types.Message, state: FSMContext):
 
     await state.set_state(Form.editing_text_field)
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack()),
-            types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack()),
-        ],
-        [
-            types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack()),
-            types.InlineKeyboardButton(text="↩️ Назад", callback_data=TextFieldAction(field="back").pack()),
-        ],
+        [types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack())],
+        [types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack())],
+        [types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack())],
+        [types.InlineKeyboardButton(text="↩️ Назад к превью", callback_data=TextFieldAction(field="back").pack())],
     ])
     await message.answer("✏️ <b>Редактирование текста</b>\n\nЧто ещё изменить?", parse_mode="HTML", reply_markup=kb)
 
@@ -567,14 +547,10 @@ async def on_edit_content(message: types.Message, state: FSMContext):
 
     await state.set_state(Form.editing_text_field)
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack()),
-            types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack()),
-        ],
-        [
-            types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack()),
-            types.InlineKeyboardButton(text="↩️ Назад", callback_data=TextFieldAction(field="back").pack()),
-        ],
+        [types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack())],
+        [types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack())],
+        [types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack())],
+        [types.InlineKeyboardButton(text="↩️ Назад к превью", callback_data=TextFieldAction(field="back").pack())],
     ])
     await message.answer("✏️ <b>Редактирование текста</b>\n\nЧто ещё изменить?", parse_mode="HTML", reply_markup=kb)
 
@@ -603,14 +579,10 @@ async def on_edit_excerpt(message: types.Message, state: FSMContext):
 
     await state.set_state(Form.editing_text_field)
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack()),
-            types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack()),
-        ],
-        [
-            types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack()),
-            types.InlineKeyboardButton(text="↩️ Назад", callback_data=TextFieldAction(field="back").pack()),
-        ],
+        [types.InlineKeyboardButton(text="📰 Заголовок", callback_data=TextFieldAction(field="title").pack())],
+        [types.InlineKeyboardButton(text="📝 Контент", callback_data=TextFieldAction(field="content").pack())],
+        [types.InlineKeyboardButton(text="📄 Excerpt", callback_data=TextFieldAction(field="excerpt").pack())],
+        [types.InlineKeyboardButton(text="↩️ Назад к превью", callback_data=TextFieldAction(field="back").pack())],
     ])
     await message.answer("✏️ <b>Редактирование текста</b>\n\nЧто ещё изменить?", parse_mode="HTML", reply_markup=kb)
 
@@ -641,7 +613,7 @@ async def cb_edit_categories(callback: types.CallbackQuery, state: FSMContext):
         row.append(types.InlineKeyboardButton(
             text=label, callback_data=TaxonomySelect(taxonomy=tax_key).pack()
         ))
-        if len(row) == 3:
+        if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
