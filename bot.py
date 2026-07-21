@@ -397,10 +397,12 @@ async def on_inline_correction(message: types.Message, state: FSMContext):
         data = await state.get_data()
         draft = await database.get_draft(data["draft_id"])
 
-        # Build correction prompt
+        # Build correction prompt with human-writing techniques
         system_prompt = (
-            "You are an editor. Given an article and a user's correction request, "
-            "modify the article accordingly. Preserve HTML tags. Output strict JSON: "
+            "You are an editor for инвестиционно.рф. Apply user's correction request. "
+            "CRITICAL: Preserve human writing style — varied sentence lengths, emotional markers, "
+            "conversational phrasing, dashes, idioms, author stance. "
+            "Preserve HTML tags. Output strict JSON: "
             '{"title": "...", "content": "...", "excerpt": "..."}'
         )
         user_prompt = (
@@ -408,6 +410,8 @@ async def on_inline_correction(message: types.Message, state: FSMContext):
             f"Current excerpt: {draft['excerpt']}\n\n"
             f"Current content:\n{draft['content'][:4000]}\n\n"
             f"User's correction request: {correction}\n\n"
+            f"Preserve human style: varied sentences, emotional markers (1-2 per paragraph), "
+            f"conversational Russian, dashes, author opinion. No AI dryness.\n\n"
             f"Return ONLY JSON with keys: title, content, excerpt. "
             f"Content must be valid HTML. Language: Russian."
         )
