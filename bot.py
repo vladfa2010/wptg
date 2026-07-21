@@ -56,7 +56,7 @@ dp.callback_query.middleware(WhitelistMiddleware())
 from aiogram.filters.callback_data import CallbackData
 
 class PreviewAction(CallbackData, prefix="preview"):
-    action: str  # publish, edit_text, edit_categories, regenerate, cancel
+    action: str  # publish, draft, edit_text, edit_categories, regenerate, cancel
 
 class TextFieldAction(CallbackData, prefix="textfield"):
     field: str  # title, content, excerpt, back
@@ -296,7 +296,8 @@ async def on_input(message: types.Message, state: FSMContext):
         tax_summary = _preview_text(draft["title"], "", draft["taxonomies"], all_terms)
 
         kb = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack())],
+            [types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
+             types.InlineKeyboardButton(text="📝 Черновик", callback_data=PreviewAction(action="draft").pack())],
             [types.InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=PreviewAction(action="edit_text").pack())],
             [types.InlineKeyboardButton(text="🏷 Редактировать категории", callback_data=PreviewAction(action="edit_categories").pack())],
             [types.InlineKeyboardButton(text="🔄 Сгенерировать заново", callback_data=PreviewAction(action="regenerate").pack())],
@@ -454,9 +455,8 @@ async def on_inline_correction(message: types.Message, state: FSMContext):
 
 
 # ─── Preview callbacks ────────────────────────────────────
-@dp.callback_query(Form.preview, PreviewAction.filter(F.action == "publish"))
-async def cb_publish(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer("Публикация...")
+async def _do_publish(callback: types.CallbackQuery, state: FSMContext, status: str) -> None:
+    """Shared logic for publish and draft."""
     data = await state.get_data()
     draft_id = data["draft_id"]
     draft = await database.get_draft(draft_id)
@@ -466,12 +466,12 @@ async def cb_publish(callback: types.CallbackQuery, state: FSMContext):
         return
 
     try:
-        logger.info("Creating WP post: title=%s, media=%s", draft["title"], draft.get("featured_media_id", 0) or 0)
+        logger.info("Creating WP post (status=%s): title=%s", status, draft["title"])
         result = await wordpress.create_post({
             "title": draft["title"],
             "content": draft["content"],
             "excerpt": draft["excerpt"] or "",
-            "status": "publish",
+            "status": status,
             "featured_media": draft.get("featured_media_id", 0) or 0,
             **draft["taxonomies"],
         })
@@ -483,23 +483,45 @@ async def cb_publish(callback: types.CallbackQuery, state: FSMContext):
             title=draft["title"],
             taxonomies=draft["taxonomies"],
             source_url=draft.get("source_url", ""),
+            status=status,
         )
         await database.delete_draft(draft_id)
 
-        await callback.message.edit_text(
-            f"✅ <b>Опубликовано!</b>\n\n"
-            f"🔗 <a href='{result['url']}'>{result['url']}</a>\n"
-            f"📊 ID поста: {result['id']}\n\n"
-            f"Пришлите новую ссылку или текст.",
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+        if status == "publish":
+            msg = (
+                f"✅ <b>Опубликовано!</b>\n\n"
+                f"🔗 <a href='{result['url']}'>{result['url']}</a>\n"
+                f"📊 ID поста: {result['id']}\n\n"
+                f"Пришлите новую ссылку или текст."
+            )
+        else:
+            msg = (
+                f"📝 <b>Сохранено как черновик!</b>\n\n"
+                f"🔗 <a href='{result['url']}'>{result['url']}</a>\n"
+                f"📊 ID поста: {result['id']}\n\n"
+                f"В WordPress можно доработать и опубликовать вручную.\n"
+                f"Пришлите новую ссылку или текст."
+            )
+
+        await callback.message.edit_text(msg, parse_mode="HTML", disable_web_page_preview=True)
         await state.clear()
         await state.set_state(Form.idle)
 
     except Exception as exc:
-        logger.exception("Publish failed")
-        await callback.message.edit_text(f"❌ Ошибка публикации: {exc}")
+        logger.exception("Publish failed (status=%s)", status)
+        await callback.message.edit_text(f"❌ Ошибка: {exc}")
+
+
+@dp.callback_query(Form.preview, PreviewAction.filter(F.action == "publish"))
+async def cb_publish(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("Публикация...")
+    await _do_publish(callback, state, "publish")
+
+
+@dp.callback_query(Form.preview, PreviewAction.filter(F.action == "draft"))
+async def cb_draft(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("Сохранение черновика...")
+    await _do_publish(callback, state, "draft")
 
 @dp.callback_query(Form.preview, PreviewAction.filter(F.action == "cancel"))
 async def cb_cancel(callback: types.CallbackQuery, state: FSMContext):
@@ -753,17 +775,12 @@ async def _return_to_preview(callback: types.CallbackQuery, state: FSMContext):
     all_terms = await database.get_all_active_taxonomies()
     preview = _preview_text(draft["title"], draft["excerpt"], draft["taxonomies"], all_terms)
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
-            types.InlineKeyboardButton(text="✏️ Текст", callback_data=PreviewAction(action="edit_text").pack()),
-        ],
-        [
-            types.InlineKeyboardButton(text="🏷 Категории", callback_data=PreviewAction(action="edit_categories").pack()),
-            types.InlineKeyboardButton(text="🔄 Заново", callback_data=PreviewAction(action="regenerate").pack()),
-        ],
-        [
-            types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack()),
-        ],
+        [types.InlineKeyboardButton(text="✅ Опубликовать", callback_data=PreviewAction(action="publish").pack()),
+         types.InlineKeyboardButton(text="📝 Черновик", callback_data=PreviewAction(action="draft").pack())],
+        [types.InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=PreviewAction(action="edit_text").pack())],
+        [types.InlineKeyboardButton(text="🏷 Редактировать категории", callback_data=PreviewAction(action="edit_categories").pack())],
+        [types.InlineKeyboardButton(text="🔄 Сгенерировать заново", callback_data=PreviewAction(action="regenerate").pack())],
+        [types.InlineKeyboardButton(text="❌ Отмена", callback_data=PreviewAction(action="cancel").pack())],
     ])
     await state.set_state(Form.preview)
     await callback.message.edit_text(preview, parse_mode="HTML", reply_markup=kb)
