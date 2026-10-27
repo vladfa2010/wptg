@@ -7,3 +7,4 @@ venv/
 data/*.db
 data/*.json
 *.log
+.deploy_key
